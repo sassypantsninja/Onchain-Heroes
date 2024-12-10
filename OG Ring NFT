@@ -1,0 +1,100 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract OnchainHeroesOGRings is ERC721URIStorage, Ownable {
+    uint256 public nextTokenId;
+    uint256 public maxSupply;
+    uint256 public mintPrice;
+    bool public mintingActive;
+    string public baseURI;
+
+    mapping(address => bool) public isOGHolder; // For whitelisting OG holders
+
+    constructor(
+        uint256 _maxSupply,
+        uint256 _mintPrice,
+        string memory _baseURI
+    ) ERC721("Onchain Heroes OG Rings", "OHOG") {
+        maxSupply = _maxSupply;
+        mintPrice = _mintPrice;
+        baseURI = _baseURI;
+        mintingActive = false; // Start with minting disabled
+    }
+
+    // Mint function (restricted to OG holders initially)
+    function mint() external payable {
+        require(mintingActive, "Minting is not active");
+        require(nextTokenId < maxSupply, "All tokens minted");
+        require(msg.value == mintPrice, "Incorrect ETH amount");
+        require(isOGHolder[msg.sender], "Not eligible for OG minting");
+
+        _safeMint(msg.sender, nextTokenId);
+        _setTokenURI(nextTokenId, string(abi.encodePacked(baseURI, uint2str(nextTokenId), ".json")));
+        nextTokenId++;
+    }
+
+    // Public mint function (for non-OG holders, optional)
+    function publicMint() external payable {
+        require(mintingActive, "Minting is not active");
+        require(nextTokenId < maxSupply, "All tokens minted");
+        require(msg.value == mintPrice, "Incorrect ETH amount");
+
+        _safeMint(msg.sender, nextTokenId);
+        _setTokenURI(nextTokenId, string(abi.encodePacked(baseURI, uint2str(nextTokenId), ".json")));
+        nextTokenId++;
+    }
+
+    // Add addresses to the OG holder list
+    function addOGHolders(address[] calldata addresses) external onlyOwner {
+        for (uint256 i = 0; i < addresses.length; i++) {
+            isOGHolder[addresses[i]] = true;
+        }
+    }
+
+    // Remove an address from the OG holder list
+    function removeOGHolder(address holder) external onlyOwner {
+        isOGHolder[holder] = false;
+    }
+
+    // Admin controls to start/stop minting
+    function toggleMinting() external onlyOwner {
+        mintingActive = !mintingActive;
+    }
+
+    // Set a new base URI for token metadata
+    function setBaseURI(string memory newBaseURI) external onlyOwner {
+        baseURI = newBaseURI;
+    }
+
+    // Withdraw contract balance (ETH)
+    function withdraw() external onlyOwner {
+        payable(owner()).transfer(address(this).balance);
+    }
+
+    // Utility to convert uint to string (for tokenURI generation)
+    function uint2str(uint256 _i) internal pure returns (string memory) {
+        if (_i == 0) return "0";
+        uint256 j = _i;
+        uint256 length;
+        while (j != 0) {
+            length++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(length);
+        uint256 k = length;
+        while (_i != 0) {
+            k = k - 1;
+            uint8 temp = uint8(48 + uint256(_i % 10));
+            bytes1 b1 = bytes1(temp);
+            bstr[k] = b1;
+            _i /= 10;
+        }
+        return string(bstr);
+    }
+
+    // Fallback to accept ETH
+    receive() external payable {}
+}
